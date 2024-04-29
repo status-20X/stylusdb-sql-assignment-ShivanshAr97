@@ -1,54 +1,51 @@
 const parseQuery = require('./queryParser');
 const readCSV = require('./csvReader');
 
-// async function CREATEQuery(query) {
-//     const { fields, table } = parseQuery(query);
-//     const data = await readCSV(`${table}.csv`);
-//     return data.map(row => {
-//         const filteredRow = {};
-//         fields.forEach(field => {
-//             filteredRow[field] = row[field];
-//         });
-//         return filteredRow;
-//     });
-// }
-
-// async function CREATEQuery(query) {
-//     const { fields, table, whereClause } = parseQuery(query);
-//     const data = await readCSV(`${table}.csv`);
-//     const filteredData = whereClause
-//         ? data.filter(row => {
-//             const [field, value] = whereClause.split('=').map(s => s.trim());
-//             return row[field] === value;
-//         })
-//         : data;
-//     return filteredData.map(row => {
-//         const selectedRow = {};
-//         fields.forEach(field => {
-//             selectedRow[field] = row[field];
-//         });
-//         return selectedRow;
-//     });
-// }
-
-// src/index.js
-
 async function CREATEQuery(query) {
     const { fields, table, whereClauses } = parseQuery(query);
     const data = await readCSV(`${table}.csv`);
-    const filteredData = whereClauses.length > 0
-        ? data.filter(row => whereClauses.every(clause => {
-            return row[clause.field] === clause.value;
-        }))
-        : data;
+    const filterData = () => {
+        return whereClauses.length > 0
+            ? data.filter((row) =>
+                whereClauses.every((clause) => evaluateCondition(row, clause))
+            )
+            : data;
+    };
+    const filteredData = filterData();
 
-    return filteredData.map(row => {
-        const selectedRow = {};
-        fields.forEach(field => {
-            selectedRow[field] = row[field];
+    try {
+        return filteredData.map((row) => {
+            const selectedRow = {};
+            fields.forEach((field) => {
+                selectedRow[field] = row[field];
+            });
+            return selectedRow;
         });
-        return selectedRow;
-    });
+    } catch (err) {
+        throw new Error(
+            "Fields in query doesn't match the fields in filtered data"
+        );
+    }
+}
+
+function evaluateCondition(row, clause) {
+    const { field, operator, value } = clause;
+    switch (operator) {
+        case "=":
+            return row[field] === value;
+        case "!=":
+            return row[field] !== value;
+        case ">":
+            return row[field] > value;
+        case "<":
+            return row[field] < value;
+        case ">=":
+            return row[field] >= value;
+        case "<=":
+            return row[field] <= value;
+        default:
+            throw new Error(`Unsupported operator: ${operator}`);
+    }
 }
 
 module.exports = CREATEQuery;
