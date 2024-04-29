@@ -1,5 +1,6 @@
 student_id,course
-1,Abc
-1,Def
-2,Xyz
-3,Abc
+1,Mathematics
+1,Physics
+2,Chemistry
+3,Mathematics
+5,Biology
