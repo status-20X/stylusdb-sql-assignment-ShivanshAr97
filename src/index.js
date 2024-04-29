@@ -13,15 +13,35 @@ const readCSV = require('./csvReader');
 //     });
 // }
 
+// async function CREATEQuery(query) {
+//     const { fields, table, whereClause } = parseQuery(query);
+//     const data = await readCSV(`${table}.csv`);
+//     const filteredData = whereClause
+//         ? data.filter(row => {
+//             const [field, value] = whereClause.split('=').map(s => s.trim());
+//             return row[field] === value;
+//         })
+//         : data;
+//     return filteredData.map(row => {
+//         const selectedRow = {};
+//         fields.forEach(field => {
+//             selectedRow[field] = row[field];
+//         });
+//         return selectedRow;
+//     });
+// }
+
+// src/index.js
+
 async function CREATEQuery(query) {
-    const { fields, table, whereClause } = parseQuery(query);
+    const { fields, table, whereClauses } = parseQuery(query);
     const data = await readCSV(`${table}.csv`);
-    const filteredData = whereClause
-        ? data.filter(row => {
-            const [field, value] = whereClause.split('=').map(s => s.trim());
-            return row[field] === value;
-        })
+    const filteredData = whereClauses.length > 0
+        ? data.filter(row => whereClauses.every(clause => {
+            return row[clause.field] === clause.value;
+        }))
         : data;
+
     return filteredData.map(row => {
         const selectedRow = {};
         fields.forEach(field => {
