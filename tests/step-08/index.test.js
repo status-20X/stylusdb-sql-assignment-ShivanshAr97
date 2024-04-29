@@ -136,7 +136,7 @@ test('Execute SQL Query with INNER JOIN', async () => {
     expect(result.length).toEqual(4);
     // toHaveProperty is not working here due to dot in the property name
     expect(result[0]).toEqual(expect.objectContaining({
-        "enrollment.course": "Mathematics",
+        "enrollment.course": "Abc",
         "student.name": "John"
     }));
 });
@@ -161,7 +161,7 @@ test('Execute SQL Query with INNER JOIN and a WHERE Clause', async () => {
     expect(result.length).toEqual(2);
     // toHaveProperty is not working here due to dot in the property name
     expect(result[0]).toEqual(expect.objectContaining({
-        "enrollment.course": "Mathematics",
+        "enrollment.course": "Abc",
         "student.name": "John"
     }));
 });
