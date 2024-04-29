@@ -1,6 +1,7 @@
 const { parseQuery } = require("./queryParser");
 const readCSV = require("./csvReader");
 
+
 async function CREATEQuery(query) {
     const {
         fields,
@@ -11,20 +12,9 @@ async function CREATEQuery(query) {
         joinCondition,
         groupByFields,
         hasAggregateWithoutGroupBy,
+        orderByFields,
     } = parseQuery(query);
     let data = await readCSV(`${table}.csv`);
-
-    console.log({
-        fields,
-        table,
-        whereClauses,
-        joinType,
-        joinTable,
-        joinCondition,
-        groupByFields,
-        hasAggregateWithoutGroupBy,
-        data,
-    });
 
     if (joinTable && joinCondition) {
         const joinData = await readCSV(`${joinTable}.csv`);
@@ -74,19 +64,34 @@ async function CREATEQuery(query) {
     let filteredData;
     filteredData = filterData();
 
-    console.log("filtered data is ", filteredData);
-
     if (groupByFields || hasAggregateWithoutGroupBy) {
         const aggregateFields = fields
-            .map((field) => getAggregateFields(field))
+            .map((field) => {
+                if (field.includes("as")) {
+                    const temp = field.split();
+                    let aggField = getAggregateFields(temp[0]);
+                    aggField["as"] = field;
+                    return aggField;
+                } else {
+                    return getAggregateFields(field);
+                }
+            })
             .filter((field) => field != undefined);
-        console.log("Aggregate fields are ", aggregateFields);
         filteredData = applyGroupBy(
             filteredData,
             groupByFields,
             aggregateFields,
             hasAggregateWithoutGroupBy
         );
+    }
+    if (orderByFields) {
+        filteredData.sort((a, b) => {
+            for (let { fieldName, order } of orderByFields) {
+                if (a[fieldName] < b[fieldName]) return order === "ASC" ? -1 : 1;
+                if (a[fieldName] > b[fieldName]) return order === "ASC" ? 1 : -1;
+            }
+            return 0;
+        });
     }
 
     try {
@@ -116,7 +121,6 @@ async function performInnerJoin(data, joinData, joinCondition, fields, table) {
                 return mainValue === joinValue;
             })
             .map((joinRow) => {
-                // Constructing output object with prefixed table name for keys
                 let output = {};
                 for (const key in mainRow) {
                     output[table + "." + key] = mainRow[key];
@@ -124,14 +128,13 @@ async function performInnerJoin(data, joinData, joinCondition, fields, table) {
                 for (const key in joinRow) {
                     output[joinCondition.right.split(".")[0] + "." + key] = joinRow[key];
                 }
-                // Retain only the specified fields
                 const filteredOutput = {};
                 fields.forEach((field) => {
                     const [tableName, fieldName] = field.split(".");
                     filteredOutput[field] =
                         tableName === table ? mainRow[fieldName] : joinRow[fieldName];
                 });
-                return { ...output, ...filteredOutput }; // Merging prefixed keys with specified fields
+                return { ...output, ...filteredOutput };
             });
     }));
 }
@@ -145,22 +148,19 @@ async function performLeftJoin(data, joinData, joinCondition, fields, table) {
         });
 
         if (matchingJoinRows.length === 0) {
-            // Constructing output object with prefixed table name for keys
             let output = {};
             for (const key in mainRow) {
                 output[table + "." + key] = mainRow[key];
             }
-            // Retain only the specified fields
             const filteredOutput = {};
             fields.forEach((field) => {
                 const [tableName, fieldName] = field.split(".");
                 filteredOutput[field] = tableName === table ? mainRow[fieldName] : null;
             });
-            return { ...output, ...filteredOutput }; // Merging prefixed keys with specified fields
+            return { ...output, ...filteredOutput };
         }
 
         return matchingJoinRows.map((joinRow) => {
-            // Constructing output object with prefixed table name for keys
             let output = {};
             for (const key in mainRow) {
                 output[table + "." + key] = mainRow[key];
@@ -168,14 +168,13 @@ async function performLeftJoin(data, joinData, joinCondition, fields, table) {
             for (const key in joinRow) {
                 output[joinCondition.right.split(".")[0] + "." + key] = joinRow[key];
             }
-            // Retain only the specified fields
             const filteredOutput = {};
             fields.forEach((field) => {
                 const [tableName, fieldName] = field.split(".");
                 filteredOutput[field] =
                     tableName === table ? mainRow[fieldName] : joinRow[fieldName];
             });
-            return { ...output, ...filteredOutput }; // Merging prefixed keys with specified fields
+            return { ...output, ...filteredOutput };
         });
     }));
 }
@@ -189,22 +188,19 @@ async function performRightJoin(data, joinData, joinCondition, fields, table) {
         });
 
         if (matchingDataRows.length === 0) {
-            // Constructing output object with prefixed table name for keys
             let output = {};
             for (const key in joinRow) {
                 output[joinCondition.right.split(".")[0] + "." + key] = joinRow[key];
             }
-            // Retain only the specified fields
             const filteredOutput = {};
             fields.forEach((field) => {
                 const [tableName, fieldName] = field.split(".");
                 filteredOutput[field] = tableName === table ? null : joinRow[fieldName];
             });
-            return { ...output, ...filteredOutput }; // Merging prefixed keys with specified fields
+            return { ...output, ...filteredOutput };
         }
 
         return matchingDataRows.map((mainRow) => {
-            // Constructing output object with prefixed table name for keys
             let output = {};
             for (const key in mainRow) {
                 output[table + "." + key] = mainRow[key];
@@ -212,14 +208,13 @@ async function performRightJoin(data, joinData, joinCondition, fields, table) {
             for (const key in joinRow) {
                 output[joinCondition.right.split(".")[0] + "." + key] = joinRow[key];
             }
-            // Retain only the specified fields
             const filteredOutput = {};
             fields.forEach((field) => {
                 const [tableName, fieldName] = field.split(".");
                 filteredOutput[field] =
                     tableName === table ? mainRow[fieldName] : joinRow[fieldName];
             });
-            return { ...output, ...filteredOutput }; // Merging prefixed keys with specified fields
+            return { ...output, ...filteredOutput };
         });
     }));
 }
@@ -252,10 +247,8 @@ function trimQuotes(inputString) {
 
 function getAggregateFields(field) {
     const match = field.match(/^(AVG|SUM|COUNT|MIN|MAX)\((.+)\)/i);
-    console.log("match is ", match);
-    console.log("match is ", match);
     if (match) {
-        return { function: match[1].trim(), on: match[2].trim() };
+        return { function: match[1].trim(), on: match[2].trim(), as: null };
     }
 }
 
@@ -276,6 +269,7 @@ function applyGroupBy(
                 case "COUNT":
                     aggregatedValues[aggFunction + "(" + fieldToAggregate + ")"] =
                         data.length;
+
                     break;
                 case "SUM":
                     const sumin = data.reduce(
@@ -322,11 +316,15 @@ function applyGroupBy(
     for (const [groupKey, group] of groupMap.entries()) {
         const aggregatedValues = {};
         aggregateFields.forEach((field) => {
-            const { function: aggFunction, on: fieldToAggregate } = field;
+            const { function: aggFunction, on: fieldToAggregate, as } = field;
             switch (aggFunction.toUpperCase()) {
                 case "COUNT":
-                    aggregatedValues[aggFunction + "(" + fieldToAggregate + ")"] =
-                        group.count;
+                    if (as) {
+                        aggregatedValues[as.trim()] = group.count;
+                    } else {
+                        aggregatedValues[aggFunction + "(" + fieldToAggregate + ")"] =
+                            group.count;
+                    }
                     break;
                 case "SUM":
                     const initialValue =
