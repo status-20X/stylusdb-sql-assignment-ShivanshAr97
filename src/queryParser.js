@@ -1,5 +1,14 @@
 function parseQuery(query) {
     query = query.trim();
+    const limitRegex = /\sLIMIT\s(\d+)/i;
+    const limitMatch = query.match(limitRegex);
+
+    let limit = null;
+    if (limitMatch) {
+        limit = parseInt(limitMatch[1], 10);
+        query = query.replace(limitRegex, '');
+    }
+
     const orderByRegex = /\sORDER BY\s(.+)/i;
     const orderByMatch = query.match(orderByRegex);
 
@@ -46,7 +55,6 @@ function parseQuery(query) {
     if (whereClause) {
         whereClauses = parseWhereClause(whereClause);
     }
-
     const table = groupByMatch ? rawTable.split('GROUP BY')[0].trim() : rawTable.trim();
     const aggregateFunctionRegex = /\b(COUNT|SUM|AVG|MIN|MAX)\(.+?\)/i;
     const hasAggregateFunction = fields.match(aggregateFunctionRegex);
@@ -68,7 +76,8 @@ function parseQuery(query) {
         joinCondition,
         groupByFields,
         hasAggregateWithoutGroupBy,
-        orderByFields
+        orderByFields,
+        limit
     };
 }
 

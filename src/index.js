@@ -1,41 +1,54 @@
 const { parseQuery } = require('./queryParser');
 const readCSV = require('./csvReader');
-
 function performInnerJoin(data, joinData, joinCondition, fields, table) {
     return data.flatMap(mainRow => {
-        const matchedJoinRows = joinData.filter(joinRow => {
-            const mainValue = mainRow[joinCondition.left.split('.')[1]];
-            const joinValue = joinRow[joinCondition.right.split('.')[1]];
-            return mainValue === joinValue;
-        });
-
-        return matchedJoinRows.map(joinRow => {
-            return fields.reduce((acc, field) => {
-                const [tableName, fieldName] = field.split('.');
-                acc[field] = tableName === table ? mainRow[fieldName] : joinRow[fieldName];
-                return acc;
-            }, {});
-        });
+        return joinData
+            .filter(joinRow => {
+                const mainValue = mainRow[joinCondition.left.split('.')[1]];
+                const joinValue = joinRow[joinCondition.right.split('.')[1]];
+                return mainValue === joinValue;
+            })
+            .map(joinRow => {
+                return fields.reduce((acc, field) => {
+                    const [tableName, fieldName] = field.split('.');
+                    acc[field] = tableName === table ? mainRow[fieldName] : joinRow[fieldName];
+                    return acc;
+                }, {});
+            });
     });
 }
-
 function performLeftJoin(data, joinData, joinCondition, fields, table) {
-    const leftJoinedData = data.flatMap(mainRow => {
-        const matchedJoinRows = joinData.filter(joinRow => {
-            const mainValue = mainRow[joinCondition.left.split('.')[1]];
-            const joinValue = joinRow[joinCondition.right.split('.')[1]];
+    return data.flatMap(mainRow => {
+        const matchingJoinRows = joinData.filter(joinRow => {
+            const mainValue = getValueFromRow(mainRow, joinCondition.left);
+            const joinValue = getValueFromRow(joinRow, joinCondition.right);
             return mainValue === joinValue;
         });
-
-        if (matchedJoinRows.length === 0) {
+        if (matchingJoinRows.length === 0) {
             return [createResultRow(mainRow, null, fields, table, true)];
         }
-        return matchedJoinRows.map(joinRow => createResultRow(mainRow, joinRow, fields, table, true));
-
+        return matchingJoinRows.map(joinRow => createResultRow(mainRow, joinRow, fields, table, true));
     });
-    return leftJoinedData;
 }
-
+function getValueFromRow(row, compoundFieldName) {
+    const [tableName, fieldName] = compoundFieldName.split('.');
+    return row[`${tableName}.${fieldName}`] || row[fieldName];
+}
+function performRightJoin(data, joinData, joinCondition, fields, table) {
+    const mainTableRowStructure = data.length > 0 ? Object.keys(data[0]).reduce((acc, key) => {
+        acc[key] = null;
+        return acc;
+    }, {}) : {};
+    return joinData.map(joinRow => {
+        const mainRowMatch = data.find(mainRow => {
+            const mainValue = getValueFromRow(mainRow, joinCondition.left);
+            const joinValue = getValueFromRow(joinRow, joinCondition.right);
+            return mainValue === joinValue;
+        });
+        const mainRowToUse = mainRowMatch || mainTableRowStructure;
+        return createResultRow(mainRowToUse, joinRow, fields, table, true);
+    });
+}
 function createResultRow(mainRow, joinRow, fields, table, includeAllMainFields) {
     const resultRow = {};
     if (includeAllMainFields) {
@@ -50,73 +63,79 @@ function createResultRow(mainRow, joinRow, fields, table, includeAllMainFields) 
     });
     return resultRow;
 }
-
-function performRightJoin(data, joinData, joinCondition, fields, table) {
-    const RowStructure = data.length > 0 ? Object.keys(data[0]).reduce((acc, key) => {
-        acc[key] = null;
-        return acc;
-    }, {}) : {};
-    let rightJoinedData = joinData.map(joinRow => {
-        const mainRowMatch = data.find(mainRow => {
-            const mainValue = getValueFromGivenRow(mainRow, joinCondition.left);
-            const joinValue = getValueFromGivenRow(joinRow, joinCondition.right);
-            return mainValue === joinValue;
-        });
-        const mainRowToUse = mainRowMatch || RowStructure;
-        return createResultRow(mainRowToUse, joinRow, fields, table, true);
-    });
-    return rightJoinedData
+function evaluateCondition(row, clause) {
+    let { field, operator, value } = clause;
+    if (row[field] === undefined) {
+        throw new Error(`Invalid field: ${field}`);
+    }
+    const rowValue = parseValue(row[field]);
+    let conditionValue = parseValue(value);
+    switch (operator) {
+        case '=': return rowValue === conditionValue;
+        case '!=': return rowValue !== conditionValue;
+        case '>': return rowValue > conditionValue;
+        case '<': return rowValue < conditionValue;
+        case '>=': return rowValue >= conditionValue;
+        case '<=': return rowValue <= conditionValue;
+        default: throw new Error(`Unsupported operator: ${operator}`);
+    }
 }
-
-function getValueFromGivenRow(row, compoundFieldName) {
-    const [tableName, fieldName] = compoundFieldName.split('.');
-    return row[`${tableName}.${fieldName}`] || row[fieldName];
+function parseValue(value) {
+    if (value === null || value === undefined) {
+        return value;
+    }
+    if (typeof value === 'string' && ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"')))) {
+        value = value.substring(1, value.length - 1);
+    }
+    if (!isNaN(value) && value.trim() !== '') {
+        return Number(value);
+    }
+    return value;
 }
-
 function applyGroupBy(data, groupByFields, aggregateFunctions) {
-    const groupResult = {};
+    const groupResults = {};
     data.forEach(row => {
-        const Key = groupByFields.map(field => row[field]).join('-');
-        if (!groupResult[Key]) {
-            groupResult[Key] = { count: 0, sums: {}, mins: {}, maxes: {} };
-            groupByFields.forEach(field => groupResult[Key][field] = row[field]);
+        const groupKey = groupByFields.map(field => row[field]).join('-');
+        if (!groupResults[groupKey]) {
+            groupResults[groupKey] = { count: 0, sums: {}, mins: {}, maxes: {} };
+            groupByFields.forEach(field => groupResults[groupKey][field] = row[field]);
         }
-        groupResult[Key].count += 1;
+        groupResults[groupKey].count += 1;
         aggregateFunctions.forEach(func => {
             const match = /(\w+)\((\w+)\)/.exec(func);
             if (match) {
-                const [, aggregateFunc, aggregateField] = match;
-                const value = parseFloat(row[aggregateField]);
-                switch (aggregateFunc.toUpperCase()) {
+                const [, aggFunc, aggField] = match;
+                const value = parseFloat(row[aggField]);
+                switch (aggFunc.toUpperCase()) {
                     case 'SUM':
-                        groupResult[Key].sums[aggregateField] = (groupResult[Key].sums[aggregateField] || 0) + value;
+                        groupResults[groupKey].sums[aggField] = (groupResults[groupKey].sums[aggField] || 0) + value;
                         break;
                     case 'MIN':
-                        groupResult[Key].mins[aggregateField] = Math.min(groupResult[Key].mins[aggregateField] || value, value);
+                        groupResults[groupKey].mins[aggField] = Math.min(groupResults[groupKey].mins[aggField] || value, value);
                         break;
                     case 'MAX':
-                        groupResult[Key].maxes[aggregateField] = Math.max(groupResult[Key].maxes[aggregateField] || value, value);
+                        groupResults[groupKey].maxes[aggField] = Math.max(groupResults[groupKey].maxes[aggField] || value, value);
                         break;
                 }
             }
         });
     });
-    return Object.values(groupResult).map(group => {
+    return Object.values(groupResults).map(group => {
         const finalGroup = {};
         groupByFields.forEach(field => finalGroup[field] = group[field]);
         aggregateFunctions.forEach(func => {
             const match = /(\w+)\((\*|\w+)\)/.exec(func);
             if (match) {
-                const [, aggregateFunc, aggregateField] = match;
-                switch (aggregateFunc.toUpperCase()) {
+                const [, aggFunc, aggField] = match;
+                switch (aggFunc.toUpperCase()) {
                     case 'SUM':
-                        finalGroup[func] = group.sums[aggregateField];
+                        finalGroup[func] = group.sums[aggField];
                         break;
                     case 'MIN':
-                        finalGroup[func] = group.mins[aggregateField];
+                        finalGroup[func] = group.mins[aggField];
                         break;
                     case 'MAX':
-                        finalGroup[func] = group.maxes[aggregateField];
+                        finalGroup[func] = group.maxes[aggField];
                         break;
                     case 'COUNT':
                         finalGroup[func] = group.count;
@@ -129,8 +148,7 @@ function applyGroupBy(data, groupByFields, aggregateFunctions) {
 }
 
 async function executeSELECTQuery(query) {
-    const { fields, table, whereClauses, joinType, joinTable, joinCondition, groupByFields, hasAggregateWithoutGroupBy, orderByFields } = parseQuery(query);
-
+    const { fields, table, whereClauses, joinType, joinTable, joinCondition, groupByFields, hasAggregateWithoutGroupBy, orderByFields, limit } = parseQuery(query);
     let data = await readCSV(`${table}.csv`);
     if (joinTable && joinCondition) {
         const joinData = await readCSV(`${joinTable}.csv`);
@@ -145,48 +163,45 @@ async function executeSELECTQuery(query) {
                 data = performRightJoin(data, joinData, joinCondition, fields, table);
                 break;
             default:
-                throw new Error(`Unsupported join type`);
+                throw new Error(`Unsupported JOIN type: ${joinType}`);
         }
     }
-
     let filteredData = whereClauses.length > 0
         ? data.filter(row => whereClauses.every(clause => evaluateCondition(row, clause)))
         : data;
-
-    let groupData = filteredData;
+    let groupResults = filteredData;
     if (hasAggregateWithoutGroupBy) {
-        const output = {};
+        const result = {};
 
         fields.forEach(field => {
             const match = /(\w+)\((\*|\w+)\)/.exec(field);
             if (match) {
-                const [, aggregrateFunc, aggregrateField] = match;
-                switch (aggregrateFunc.toUpperCase()) {
+                const [, aggFunc, aggField] = match;
+                switch (aggFunc.toUpperCase()) {
                     case 'COUNT':
-                        output[field] = filteredData.length;
+                        result[field] = filteredData.length;
                         break;
                     case 'SUM':
-                        output[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggregrateField]), 0);
+                        result[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggField]), 0);
                         break;
                     case 'AVG':
-                        output[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggregrateField]), 0) / filteredData.length;
+                        result[field] = filteredData.reduce((acc, row) => acc + parseFloat(row[aggField]), 0) / filteredData.length;
                         break;
                     case 'MIN':
-                        output[field] = Math.min(...filteredData.map(row => parseFloat(row[aggregrateField])));
+                        result[field] = Math.min(...filteredData.map(row => parseFloat(row[aggField])));
                         break;
                     case 'MAX':
-                        output[field] = Math.max(...filteredData.map(row => parseFloat(row[aggregrateField])));
+                        result[field] = Math.max(...filteredData.map(row => parseFloat(row[aggField])));
                         break;
                 }
             }
         });
-
-        return [output];
+        return [result];
     } else if (groupByFields) {
-        groupData = applyGroupBy(filteredData, groupByFields, fields)
-        let orderOutput = groupData;
+        groupResults = applyGroupBy(filteredData, groupByFields, fields);
+        let orderedResults = groupResults;
         if (orderByFields) {
-            orderOutput = groupData.sort((a, b) => {
+            orderedResults = groupResults.sort((a, b) => {
                 for (let { fieldName, order } of orderByFields) {
                     if (a[fieldName] < b[fieldName]) return order === 'ASC' ? -1 : 1;
                     if (a[fieldName] > b[fieldName]) return order === 'ASC' ? 1 : -1;
@@ -194,13 +209,14 @@ async function executeSELECTQuery(query) {
                 return 0;
             });
         }
-        return groupData;
-
-
+        if (limit !== null) {
+            groupResults = groupResults.slice(0, limit);
+        }
+        return groupResults;
     } else {
-        let orderOutput = groupData;
+        let orderedResults = groupResults;
         if (orderByFields) {
-            orderOutput = groupData.sort((a, b) => {
+            orderedResults = groupResults.sort((a, b) => {
                 for (let { fieldName, order } of orderByFields) {
                     if (a[fieldName] < b[fieldName]) return order === 'ASC' ? -1 : 1;
                     if (a[fieldName] > b[fieldName]) return order === 'ASC' ? 1 : -1;
@@ -209,7 +225,10 @@ async function executeSELECTQuery(query) {
             });
         }
 
-        return orderOutput.map(row => {
+        if (limit !== null) {
+            orderedResults = orderedResults.slice(0, limit);
+        }
+        return orderedResults.map(row => {
             const selectedRow = {};
             fields.forEach(field => {
                 selectedRow[field] = row[field];
@@ -218,40 +237,4 @@ async function executeSELECTQuery(query) {
         });
     }
 }
-
-function evaluateCondition(row, clause) {
-    let { field, operator, value } = clause;
-
-    if (row[field] === undefined) {
-        throw new Error(`Invalid field`);
-    }
-    const rowValue = parsingValue(row[field]);
-    let conditionValue = parsingValue(value);
-    switch (operator) {
-        case '=': return rowValue === conditionValue;
-        case '!=': return rowValue !== conditionValue;
-        case '>': return rowValue > conditionValue;
-        case '<': return rowValue < conditionValue;
-        case '>=': return rowValue >= conditionValue;
-        case '<=': return rowValue <= conditionValue;
-        default: throw new Error(`Unsupported operator: ${operator}`);
-    }
-}
-
-function parsingValue(value) {
-    if (value === null || value === undefined) {
-        return value;
-    }
-    if (typeof value === 'string' && ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"')))) {
-        value = value.substring(1, value.length - 1);
-    }
-    if (!isNaN(value) && value.trim() !== '') {
-        return Number(value);
-    }
-    return value;
-}
-
-const query1 = `SELECT name FROM student ORDER BY name ASC`;
-const ret = executeSELECTQuery(query1)
-
 module.exports = executeSELECTQuery;
