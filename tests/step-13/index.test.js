@@ -1,5 +1,5 @@
 const readCSV = require('../../src/csvReader');
-const {parseQuery, parseJoinClause} = require('../../src/queryParser');
+const { parseQuery, parseJoinClause } = require('../../src/queryParser');
 const executeSELECTQuery = require('../../src/index');
 
 test('Read CSV File', async () => {
@@ -7,7 +7,7 @@ test('Read CSV File', async () => {
     expect(data.length).toBeGreaterThan(0);
     expect(data.length).toBe(4);
     expect(data[0].name).toBe('John');
-    expect(data[0].age).toBe('30'); //ignore the string type here, we will fix this later
+    expect(data[0].age).toBe('30');
 });
 
 test('Execute SQL Query', async () => {
@@ -53,16 +53,7 @@ test('Execute SQL Query with Not Equal to', async () => {
 test('Execute SQL Query with INNER JOIN', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student INNER JOIN enrollment ON student.id=enrollment.student_id';
     const result = await executeSELECTQuery(query);
-    /*
-    result = [
-      { 'student.name': 'John', 'enrollment.course': 'Mathematics' },
-      { 'student.name': 'John', 'enrollment.course': 'Physics' },
-      { 'student.name': 'Jane', 'enrollment.course': 'Chemistry' },
-      { 'student.name': 'Bob', 'enrollment.course': 'Mathematics' }
-    ]
-    */
     expect(result.length).toEqual(4);
-    // toHaveProperty is not working here due to dot in the property name
     expect(result[0]).toEqual(expect.objectContaining({
         "enrollment.course": "Mathematics",
         "student.name": "John"
@@ -72,22 +63,7 @@ test('Execute SQL Query with INNER JOIN', async () => {
 test('Execute SQL Query with INNER JOIN and a WHERE Clause', async () => {
     const query = 'SELECT student.name, enrollment.course, student.age FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE student.age > 25';
     const result = await executeSELECTQuery(query);
-    /*
-    result =  [
-      {
-        'student.name': 'John',
-        'enrollment.course': 'Mathematics',
-        'student.age': '30'
-      },
-      {
-        'student.name': 'John',
-        'enrollment.course': 'Physics',
-        'student.age': '30'
-      }
-    ]
-    */
     expect(result.length).toEqual(2);
-    // toHaveProperty is not working here due to dot in the property name
     expect(result[0]).toEqual(expect.objectContaining({
         "enrollment.course": "Mathematics",
         "student.name": "John"
@@ -101,7 +77,7 @@ test('Execute SQL Query with LEFT JOIN', async () => {
         expect.objectContaining({ "student.name": "Alice", "enrollment.course": null }),
         expect.objectContaining({ "student.name": "John", "enrollment.course": "Mathematics" })
     ]));
-    expect(result.length).toEqual(5); // 4 students, but John appears twice
+    expect(result.length).toEqual(5);
 });
 
 test('Execute SQL Query with RIGHT JOIN', async () => {
@@ -111,7 +87,7 @@ test('Execute SQL Query with RIGHT JOIN', async () => {
         expect.objectContaining({ "student.name": null, "enrollment.course": "Biology" }),
         expect.objectContaining({ "student.name": "John", "enrollment.course": "Mathematics" })
     ]));
-    expect(result.length).toEqual(5); // 4 courses, but Mathematics appears twice
+    expect(result.length).toEqual(5);
 });
 
 test('Execute SQL Query with LEFT JOIN with a WHERE clause filtering the main table', async () => {
@@ -173,7 +149,6 @@ test('Execute SUM Aggregate Query', async () => {
 test('Execute AVG Aggregate Query', async () => {
     const query = 'SELECT AVG(age) FROM student';
     const result = await executeSELECTQuery(query);
-    // Assuming AVG returns a single decimal point value
     expect(result).toEqual([{ 'AVG(age)': 25.25 }]);
 });
 
@@ -252,7 +227,7 @@ test('Count courses for a specific student', async () => {
 test('Average age of students above a certain age', async () => {
     const query = 'SELECT AVG(age) FROM student WHERE age > 22';
     const result = await executeSELECTQuery(query);
-    const expectedAverage = (25 + 30 + 24) / 3; // Average age of students older than 22
+    const expectedAverage = (25 + 30 + 24) / 3;
     expect(result).toEqual([{ 'AVG(age)': expectedAverage }]);
 });
 
@@ -262,6 +237,7 @@ test('Parse SQL Query', () => {
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         joinCondition: null,
         joinTable: null,
@@ -279,6 +255,7 @@ test('Parse SQL Query with WHERE Clause', () => {
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [{
             "field": "age",
             "operator": "=",
@@ -300,6 +277,7 @@ test('Parse SQL Query with Multiple WHERE Clauses', () => {
     expect(parsed).toEqual({
         fields: ['id', 'name'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [{
             "field": "age",
             "operator": "=",
@@ -326,6 +304,7 @@ test('Parse SQL Query with INNER JOIN', async () => {
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
         whereClauses: [],
+        "isDistinct": false,
         joinTable: 'enrollment',
         joinType: "INNER",
         joinCondition: { left: 'student.id', right: 'enrollment.student_id' },
@@ -342,6 +321,7 @@ test('Parse SQL Query with INNER JOIN and WHERE Clause', async () => {
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [{ field: 'student.age', operator: '>', value: '20' }],
         joinTable: 'enrollment',
         joinType: "INNER",
@@ -401,6 +381,7 @@ test('Parse LEFT Join Query Completely', () => {
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         joinType: 'LEFT',
         joinTable: 'enrollment',
@@ -418,6 +399,7 @@ test('Parse LEFT Join Query Completely', () => {
     expect(result).toEqual({
         fields: ['student.name', 'enrollment.course'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         joinType: 'RIGHT',
         joinTable: 'enrollment',
@@ -438,6 +420,7 @@ test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the main tabl
         "joinTable": "enrollment",
         "joinType": "LEFT",
         "table": "student",
+        "isDistinct": false,
         "whereClauses": [{ "field": "student.age", "operator": ">", "value": "22" }],
         groupByFields: null,
         hasAggregateWithoutGroupBy: false,
@@ -455,6 +438,7 @@ test('Parse SQL Query with LEFT JOIN with a WHERE clause filtering the join tabl
         "joinTable": "enrollment",
         "joinType": "LEFT",
         "table": "student",
+        "isDistinct": false,
         "whereClauses": [{ "field": "enrollment.course", "operator": "=", "value": "'Physics'" }],
         groupByFields: null,
         hasAggregateWithoutGroupBy: false,
@@ -472,6 +456,7 @@ test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the main tab
         "joinTable": "enrollment",
         "joinType": "RIGHT",
         "table": "student",
+        "isDistinct": false,
         "whereClauses": [{ "field": "student.age", "operator": "<", "value": "25" }],
         groupByFields: null,
         hasAggregateWithoutGroupBy: false,
@@ -489,6 +474,7 @@ test('Parse SQL Query with RIGHT JOIN with a WHERE clause filtering the join tab
         "joinTable": "enrollment",
         "joinType": "RIGHT",
         "table": "student",
+        "isDistinct": false,
         "whereClauses": [{ "field": "enrollment.course", "operator": "=", "value": "'Chemistry'" }],
         groupByFields: null,
         hasAggregateWithoutGroupBy: false,
@@ -504,6 +490,7 @@ test('Parse COUNT Aggregate Query', () => {
     expect(parsed).toEqual({
         fields: ['COUNT(*)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         groupByFields: null,
         hasAggregateWithoutGroupBy: true,
@@ -522,6 +509,7 @@ test('Parse SUM Aggregate Query', () => {
     expect(parsed).toEqual({
         fields: ['SUM(age)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         groupByFields: null,
         hasAggregateWithoutGroupBy: true,
@@ -539,6 +527,7 @@ test('Parse AVG Aggregate Query', () => {
     expect(parsed).toEqual({
         fields: ['AVG(age)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         groupByFields: null,
         hasAggregateWithoutGroupBy: true,
@@ -556,6 +545,7 @@ test('Parse MIN Aggregate Query', () => {
     expect(parsed).toEqual({
         fields: ['MIN(age)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         groupByFields: null,
         hasAggregateWithoutGroupBy: true,
@@ -574,6 +564,7 @@ test('Parse MAX Aggregate Query', () => {
         fields: ['MAX(age)'],
         table: 'student',
         whereClauses: [],
+        "isDistinct": false,
         groupByFields: null,
         hasAggregateWithoutGroupBy: true,
         "joinCondition": null,
@@ -590,6 +581,7 @@ test('Parse basic GROUP BY query', () => {
     expect(parsed).toEqual({
         fields: ['age', 'COUNT(*)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [],
         groupByFields: ['age'],
         joinType: null,
@@ -607,6 +599,7 @@ test('Parse GROUP BY query with WHERE clause', () => {
     expect(parsed).toEqual({
         fields: ['age', 'COUNT(*)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [{ field: 'age', operator: '>', value: '22' }],
         groupByFields: ['age'],
         joinType: null,
@@ -624,6 +617,7 @@ test('Parse GROUP BY query with multiple fields', () => {
     expect(parsed).toEqual({
         fields: ['student_id', 'course', 'COUNT(*)'],
         table: 'enrollment',
+        "isDistinct": false,
         whereClauses: [],
         groupByFields: ['student_id', 'course'],
         joinType: null,
@@ -641,6 +635,7 @@ test('Parse GROUP BY query with JOIN and WHERE clauses', () => {
     expect(parsed).toEqual({
         fields: ['student.name', 'COUNT(*)'],
         table: 'student',
+        "isDistinct": false,
         whereClauses: [{ field: 'enrollment.course', operator: '=', value: '"Mathematics"' }],
         groupByFields: ['student.name'],
         joinType: 'INNER',
@@ -703,7 +698,7 @@ test('Execute SQL Query with LIMIT clause equal to total rows', async () => {
 test('Execute SQL Query with LIMIT clause exceeding total rows', async () => {
     const query = 'SELECT id, name FROM student LIMIT 10';
     const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(4); // Total rows in student.csv
+    expect(result.length).toEqual(4);
 });
 
 test('Execute SQL Query with LIMIT 0', async () => {
@@ -721,6 +716,6 @@ test('Execute SQL Query with LIMIT and ORDER BY clause', async () => {
 });
 
 test('Error Handling with Malformed Query', async () => {
-    const query = 'SELECT FROM table'; // intentionally malformed
+    const query = 'SELECT FROM table';
     await expect(executeSELECTQuery(query)).rejects.toThrow("Error executing query: Query parsing error: Invalid SELECT format");
 });
