@@ -1,13 +1,13 @@
-const readCSV = require('../../src/csvReader');
+const { readCSV } = require('../../src/csvReader');
 const { parseQuery, parseJoinClause } = require('../../src/queryParser');
-const executeSELECTQuery = require('../../src/index');
+const { executeSELECTQuery } = require('../../src/index');
 
 test('Read CSV File', async () => {
     const data = await readCSV('./student.csv');
     expect(data.length).toBeGreaterThan(0);
     expect(data.length).toBe(4);
     expect(data[0].name).toBe('John');
-    expect(data[0].age).toBe('30'); //ignore the string type here, we will fix this later
+    expect(data[0].age).toBe('30');
 });
 
 test('Execute SQL Query', async () => {
@@ -53,16 +53,7 @@ test('Execute SQL Query with Not Equal to', async () => {
 test('Execute SQL Query with INNER JOIN', async () => {
     const query = 'SELECT student.name, enrollment.course FROM student INNER JOIN enrollment ON student.id=enrollment.student_id';
     const result = await executeSELECTQuery(query);
-    /*
-    result = [
-      { 'student.name': 'John', 'enrollment.course': 'Mathematics' },
-      { 'student.name': 'John', 'enrollment.course': 'Physics' },
-      { 'student.name': 'Jane', 'enrollment.course': 'Chemistry' },
-      { 'student.name': 'Bob', 'enrollment.course': 'Mathematics' }
-    ]
-    */
     expect(result.length).toEqual(4);
-    // toHaveProperty is not working here due to dot in the property name
     expect(result[0]).toEqual(expect.objectContaining({
         "enrollment.course": "Mathematics",
         "student.name": "John"
@@ -72,22 +63,7 @@ test('Execute SQL Query with INNER JOIN', async () => {
 test('Execute SQL Query with INNER JOIN and a WHERE Clause', async () => {
     const query = 'SELECT student.name, enrollment.course, student.age FROM student INNER JOIN enrollment ON student.id = enrollment.student_id WHERE student.age > 25';
     const result = await executeSELECTQuery(query);
-    /*
-    result =  [
-      {
-        'student.name': 'John',
-        'enrollment.course': 'Mathematics',
-        'student.age': '30'
-      },
-      {
-        'student.name': 'John',
-        'enrollment.course': 'Physics',
-        'student.age': '30'
-      }
-    ]
-    */
     expect(result.length).toEqual(2);
-    // toHaveProperty is not working here due to dot in the property name
     expect(result[0]).toEqual(expect.objectContaining({
         "enrollment.course": "Mathematics",
         "student.name": "John"
@@ -101,7 +77,7 @@ test('Execute SQL Query with LEFT JOIN', async () => {
         expect.objectContaining({ "student.name": "Alice", "enrollment.course": null }),
         expect.objectContaining({ "student.name": "John", "enrollment.course": "Mathematics" })
     ]));
-    expect(result.length).toEqual(5); // 4 students, but John appears twice
+    expect(result.length).toEqual(5);
 });
 
 test('Execute SQL Query with RIGHT JOIN', async () => {
@@ -111,7 +87,7 @@ test('Execute SQL Query with RIGHT JOIN', async () => {
         expect.objectContaining({ "student.name": null, "enrollment.course": "Biology" }),
         expect.objectContaining({ "student.name": "John", "enrollment.course": "Mathematics" })
     ]));
-    expect(result.length).toEqual(5); // 4 courses, but Mathematics appears twice
+    expect(result.length).toEqual(5);
 });
 
 test('Execute SQL Query with LEFT JOIN with a WHERE clause filtering the main table', async () => {
@@ -173,7 +149,6 @@ test('Execute SUM Aggregate Query', async () => {
 test('Execute AVG Aggregate Query', async () => {
     const query = 'SELECT AVG(age) FROM student';
     const result = await executeSELECTQuery(query);
-    // Assuming AVG returns a single decimal point value
     expect(result).toEqual([{ 'AVG(age)': 25.25 }]);
 });
 
@@ -252,7 +227,7 @@ test('Count courses for a specific student', async () => {
 test('Average age of students above a certain age', async () => {
     const query = 'SELECT AVG(age) FROM student WHERE age > 22';
     const result = await executeSELECTQuery(query);
-    const expectedAverage = (25 + 30 + 24) / 3; // Average age of students older than 22
+    const expectedAverage = (25 + 30 + 24) / 3;
     expect(result).toEqual([{ 'AVG(age)': expectedAverage }]);
 });
 
@@ -723,7 +698,7 @@ test('Execute SQL Query with LIMIT clause equal to total rows', async () => {
 test('Execute SQL Query with LIMIT clause exceeding total rows', async () => {
     const query = 'SELECT id, name FROM student LIMIT 10';
     const result = await executeSELECTQuery(query);
-    expect(result.length).toEqual(4); // Total rows in student.csv
+    expect(result.length).toEqual(4);
 });
 
 test('Execute SQL Query with LIMIT 0', async () => {
@@ -741,7 +716,7 @@ test('Execute SQL Query with LIMIT and ORDER BY clause', async () => {
 });
 
 test('Error Handling with Malformed Query', async () => {
-    const query = 'SELECT FROM table'; // intentionally malformed
+    const query = 'SELECT FROM table';
     await expect(executeSELECTQuery(query)).rejects.toThrow("Error executing query: Query parsing error: Invalid SELECT format");
 });
 
@@ -754,7 +729,6 @@ test('Basic DISTINCT Usage', async () => {
 test('DISTINCT with Multiple Columns', async () => {
     const query = 'SELECT DISTINCT student_id, course FROM enrollment';
     const result = await executeSELECTQuery(query);
-    // Expecting unique combinations of student_id and course
     expect(result).toEqual([
         { student_id: '1', course: 'Mathematics' },
         { student_id: '1', course: 'Physics' },
@@ -763,60 +737,50 @@ test('DISTINCT with Multiple Columns', async () => {
         { student_id: '5', course: 'Biology' },
     ]);
 });
-
-// Not a good test right now
 test('DISTINCT with WHERE Clause', async () => {
     const query = 'SELECT DISTINCT course FROM enrollment WHERE student_id = "1"';
     const result = await executeSELECTQuery(query);
-    // Expecting courses taken by student with ID 1
     expect(result).toEqual([{ course: 'Mathematics' }, { course: 'Physics' }]);
 });
 
 test('DISTINCT with JOIN Operations', async () => {
     const query = 'SELECT DISTINCT student.name FROM student INNER JOIN enrollment ON student.id = enrollment.student_id';
     const result = await executeSELECTQuery(query);
-    // Expecting names of students who are enrolled in any course
     expect(result).toEqual([{ "student.name": 'John' }, { "student.name": 'Jane' }, { "student.name": 'Bob' }]);
 });
 
 test('DISTINCT with ORDER BY and LIMIT', async () => {
     const query = 'SELECT DISTINCT age FROM student ORDER BY age DESC LIMIT 2';
     const result = await executeSELECTQuery(query);
-    // Expecting the two highest unique ages
     expect(result).toEqual([{ age: '30' }, { age: '25' }]);
 });
 
 test('Execute SQL Query with LIKE Operator for Name', async () => {
     const query = "SELECT name FROM student WHERE name LIKE '%Jane%'";
     const result = await executeSELECTQuery(query);
-    // Expecting names containing 'Jane'
     expect(result).toEqual([{ name: 'Jane' }]);
 });
 
 test('Execute SQL Query with LIKE Operator and Wildcards', async () => {
     const query = "SELECT name FROM student WHERE name LIKE 'J%'";
     const result = await executeSELECTQuery(query);
-    // Expecting names starting with 'J'
     expect(result).toEqual([{ name: 'John' }, { name: 'Jane' }]);
 });
 
 test('Execute SQL Query with LIKE Operator Case Insensitive', async () => {
     const query = "SELECT name FROM student WHERE name LIKE '%bob%'";
     const result = await executeSELECTQuery(query);
-    // Expecting names 'Bob' (case insensitive)
     expect(result).toEqual([{ name: 'Bob' }]);
 });
 
 test('Execute SQL Query with LIKE Operator and DISTINCT', async () => {
     const query = "SELECT DISTINCT name FROM student WHERE name LIKE '%e%'";
     const result = await executeSELECTQuery(query);
-    // Expecting unique names containing 'e'
     expect(result).toEqual([{ name: 'Jane' }, { name: 'Alice' }]);
 });
 
 test('LIKE with ORDER BY and LIMIT', async () => {
     const query = "SELECT name FROM student WHERE name LIKE '%a%' ORDER BY name ASC LIMIT 2";
     const result = await executeSELECTQuery(query);
-    // Expecting the first two names alphabetically that contain 'a'
     expect(result).toEqual([{ name: 'Alice' }, { name: 'Jane' }]);
 });

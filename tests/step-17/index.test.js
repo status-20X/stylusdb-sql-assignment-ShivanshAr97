@@ -186,6 +186,7 @@ test('Count enrollments per course', async () => {
     ]);
 });
 
+
 test('Count courses per student', async () => {
     const query = 'SELECT student_id, COUNT(*) FROM enrollment GROUP BY student_id';
     const result = await executeSELECTQuery(query);
@@ -783,4 +784,4 @@ test('LIKE with ORDER BY and LIMIT', async () => {
     const query = "SELECT name FROM student WHERE name LIKE '%a%' ORDER BY name ASC LIMIT 2";
     const result = await executeSELECTQuery(query);
     expect(result).toEqual([{ name: 'Alice' }, { name: 'Jane' }]);
-});
+})

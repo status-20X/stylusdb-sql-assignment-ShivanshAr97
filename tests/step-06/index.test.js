@@ -1,6 +1,6 @@
-const readCSV = require('../../src/csvReader');
+const { readCSV } = require('../../src/csvReader');
 const { parseQuery } = require('../../src/queryParser');
-const executeSELECTQuery = require('../../src/index');
+const { executeSELECTQuery } = require('../../src/index');
 
 test('Read CSV File', async () => {
     const data = await readCSV('./student.csv');
@@ -20,6 +20,8 @@ test('Parse SQL Query', () => {
         joinTable: null,
         joinCondition: null,
         joinType: null,
+        limit: null,
+        "isDistinct": false,
         groupByFields: null,
         hasAggregateWithoutGroupBy: false,
         orderByFields: null
@@ -51,6 +53,8 @@ test('Parse SQL Query with WHERE Clause', () => {
         joinType: null,
         joinCondition: null,
         groupByFields: null,
+        limit: null,
+        "isDistinct": false,
         hasAggregateWithoutGroupBy: false,
         orderByFields: null
     });
@@ -84,6 +88,8 @@ test('Parse SQL Query with Multiple WHERE Clauses', () => {
         joinCondition: null,
         joinType: null,
         groupByFields: null,
+        limit: null,
+        "isDistinct": false,
         hasAggregateWithoutGroupBy: false,
         orderByFields: null
     });
