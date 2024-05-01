@@ -6,6 +6,7 @@ function parseQuery(query) {
             isDistinct = true;
             query = query.replace('SELECT DISTINCT', 'SELECT');
         }
+
         const limitRegex = /\sLIMIT\s(\d+)/i;
         const limitMatch = query.match(limitRegex);
         let limit = null;
@@ -33,7 +34,6 @@ function parseQuery(query) {
         const whereSplit = query.split(/\sWHERE\s/i);
         const queryWithoutWhere = whereSplit[0];
         const whereClause = whereSplit.length > 1 ? whereSplit[1].trim() : null;
-
         const joinSplit = queryWithoutWhere.split(/\s(INNER|LEFT|RIGHT) JOIN\s/i);
         const selectPart = joinSplit[0].trim();
         const { joinType, joinTable, joinCondition } = parseJoinClause(queryWithoutWhere);
@@ -52,6 +52,7 @@ function parseQuery(query) {
             fields: fields.split(',').map(field => field.trim()),
             table: table.trim(),
             whereClauses,
+
             orderByFields,
             joinType,
             joinTable,
