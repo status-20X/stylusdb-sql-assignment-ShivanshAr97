@@ -33,6 +33,7 @@ function parseQuery(query) {
         const whereSplit = query.split(/\sWHERE\s/i);
         const queryWithoutWhere = whereSplit[0];
         const whereClause = whereSplit.length > 1 ? whereSplit[1].trim() : null;
+
         const joinSplit = queryWithoutWhere.split(/\s(INNER|LEFT|RIGHT) JOIN\s/i);
         const selectPart = joinSplit[0].trim();
         const { joinType, joinTable, joinCondition } = parseJoinClause(queryWithoutWhere);
@@ -51,7 +52,6 @@ function parseQuery(query) {
             fields: fields.split(',').map(field => field.trim()),
             table: table.trim(),
             whereClauses,
-
             orderByFields,
             joinType,
             joinTable,
@@ -127,4 +127,25 @@ function parseInsertQuery(query) {
     };
 }
 
-module.exports = { parseQuery, parseJoinClause, parseInsertQuery };
+function parseDeleteQuery(query) {
+    const deleteRegex = /DELETE FROM (\w+)( WHERE (.*))?/i;
+    const match = query.match(deleteRegex);
+
+    if (!match) {
+        throw new Error("Invalid DELETE syntax.");
+    }
+
+    const [, table, , whereString] = match;
+    let whereClauses = [];
+    if (whereString) {
+        whereClauses = parseWhereClause(whereString);
+    }
+
+    return {
+        type: 'DELETE',
+        table: table.trim(),
+        whereClauses
+    };
+}
+
+module.exports = { parseQuery, parseJoinClause, parseInsertQuery, parseDeleteQuery };

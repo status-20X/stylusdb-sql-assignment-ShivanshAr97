@@ -1,4 +1,4 @@
-const { parseQuery, parseInsertQuery } = require('./queryParser');
+const { parseQuery, parseInsertQuery, parseDeleteQuery } = require('./queryParser');
 const { readCSV, writeCSV } = require('./csvReader');
 
 function performInnerJoin(data, joinData, joinCondition, fields, table) {
@@ -162,6 +162,7 @@ async function executeSELECTQuery(query) {
 
         const { fields, table, whereClauses, joinType, joinTable, joinCondition, groupByFields, hasAggregateWithoutGroupBy, orderByFields, limit, isDistinct } = parseQuery(query);
         let data = await readCSV(`${table}.csv`);
+
         if (joinTable && joinCondition) {
             const joinData = await readCSV(`${joinTable}.csv`);
             switch (joinType.toUpperCase()) {
@@ -257,8 +258,6 @@ async function executeSELECTQuery(query) {
             }
 
             return (limitResults);
-
-
         }
     } catch (error) {
         throw new Error(`Error executing query: ${error.message}`);
@@ -279,7 +278,21 @@ async function executeINSERTQuery(query) {
     });
     data.push(newRow);
     await writeCSV(`${table}.csv`, data);
+
     return { message: "Row inserted successfully." };
 }
 
-module.exports = { executeSELECTQuery, executeINSERTQuery };
+async function executeDELETEQuery(query) {
+    const { table, whereClauses } = parseDeleteQuery(query);
+    let data = await readCSV(`${table}.csv`);
+
+    if (whereClauses.length > 0) {
+        data = data.filter(row => !whereClauses.every(clause => evaluateCondition(row, clause)));
+    } else {
+        data = [];
+    }
+    await writeCSV(`${table}.csv`, data);
+
+    return { message: "Rows deleted successfully." };
+}
+module.exports = { executeSELECTQuery, executeINSERTQuery, executeDELETEQuery };
