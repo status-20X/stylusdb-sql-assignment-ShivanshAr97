@@ -10,10 +10,9 @@ function parseQuery(query) {
         const limitMatch = query.match(limitRegex);
         let limit = null;
         if (limitMatch) {
-            limit = parseInt(limitMatch[1]);
+            limit = parseInt(limitMatch[1], 10);
+            query = query.replace(limitRegex, '');
         }
-        query = query.replace(limitRegex, '');
-
         const orderByRegex = /\sORDER BY\s(.+)/i;
         const orderByMatch = query.match(orderByRegex);
         let orderByFields = null;
@@ -22,55 +21,58 @@ function parseQuery(query) {
                 const [fieldName, order] = field.trim().split(/\s+/);
                 return { fieldName, order: order ? order.toUpperCase() : 'ASC' };
             });
+            query = query.replace(orderByRegex, '');
         }
-        query = query.replace(orderByRegex, '');
         const groupByRegex = /\sGROUP BY\s(.+)/i;
         const groupByMatch = query.match(groupByRegex);
-
         let groupByFields = null;
         if (groupByMatch) {
             groupByFields = groupByMatch[1].split(',').map(field => field.trim());
+            query = query.replace(groupByRegex, '');
         }
-        query = query.replace(groupByRegex, '');
         const whereSplit = query.split(/\sWHERE\s/i);
         const queryWithoutWhere = whereSplit[0];
         const whereClause = whereSplit.length > 1 ? whereSplit[1].trim() : null;
         const joinSplit = queryWithoutWhere.split(/\s(INNER|LEFT|RIGHT) JOIN\s/i);
         const selectPart = joinSplit[0].trim();
+        const { joinType, joinTable, joinCondition } = parseJoinClause(queryWithoutWhere);
         const selectRegex = /^SELECT\s(.+?)\sFROM\s(.+)/i;
         const selectMatch = selectPart.match(selectRegex);
-
         if (!selectMatch) {
-            throw new Error("Invalid SELECT format");
+            throw new Error('Invalid SELECT format');
         }
         const [, fields, table] = selectMatch;
-        const { joinType, joinTable, joinCondition } = parseJoinClause(queryWithoutWhere);
         let whereClauses = [];
         if (whereClause) {
             whereClauses = parseWhereClause(whereClause);
         }
-        const aggregateFunctionRegex = /(\bCOUNT\b|\bAVG\b|\bSUM\b|\bMIN\b|\bMAX\b)\s*\(\s*(\*|\w+)\s*\)/i;
-        const hasAggregateWithoutGroupBy = aggregateFunctionRegex.test(query) && !groupByFields;
-
+        const hasAggregateWithoutGroupBy = checkAggregateWithoutGroupBy(query, groupByFields);
         return {
             fields: fields.split(',').map(field => field.trim()),
             table: table.trim(),
             whereClauses,
+
+            orderByFields,
             joinType,
             joinTable,
             joinCondition,
             groupByFields,
-            orderByFields,
+            hasAggregateWithoutGroupBy,
             limit,
-            isDistinct,
-            hasAggregateWithoutGroupBy
+            isDistinct
         };
     } catch (error) {
         throw new Error(`Query parsing error: ${error.message}`);
     }
 }
+
+function checkAggregateWithoutGroupBy(query, groupByFields) {
+    const aggregateFunctionRegex = /(\bCOUNT\b|\bAVG\b|\bSUM\b|\bMIN\b|\bMAX\b)\s*\(\s*(\*|\w+)\s*\)/i;
+    return aggregateFunctionRegex.test(query) && !groupByFields;
+}
+
 function parseWhereClause(whereString) {
-    const conditionRegex = /(.*?)(=|!=|>=|<=|>|<)(.*)/;
+    const conditionRegex = /(.*?)(=|!=|>|<|>=|<=)(.*)/;
     return whereString.split(/ AND | OR /i).map(conditionString => {
         if (conditionString.includes(' LIKE ')) {
             const [field, pattern] = conditionString.split(/\sLIKE\s/i);
@@ -83,6 +85,7 @@ function parseWhereClause(whereString) {
             }
             throw new Error('Invalid WHERE clause format');
         }
+        throw new Error('Invalid WHERE clause format');
     });
 }
 function parseJoinClause(query) {
@@ -100,10 +103,28 @@ function parseJoinClause(query) {
         };
     }
     return {
+
+        joinCondition: null,
         joinType: null,
         joinTable: null,
-        joinCondition: null
     };
 }
 
-module.exports = { parseQuery, parseJoinClause };
+function parseInsertQuery(query) {
+    const insertRegex = /INSERT INTO (\w+)\s\((.+)\)\sVALUES\s\((.+)\)/i;
+    const match = query.match(insertRegex);
+
+    if (!match) {
+        throw new Error("Invalid INSERT INTO syntax.");
+    }
+
+    const [, table, columns, values] = match;
+    return {
+        type: 'INSERT',
+        table: table.trim(),
+        columns: columns.split(',').map(column => column.trim()),
+        values: values.split(',').map(value => value.trim())
+    };
+}
+
+module.exports = { parseQuery, parseJoinClause, parseInsertQuery };
